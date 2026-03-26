@@ -84,3 +84,16 @@ invoice_line_items.show(5)
 payments.show(5)
 exchange_rates.show(5)
 regions.show(5)
+
+
+
+from pyspark.sql.functions import lower, col
+
+customers = (
+    spark.table("azure_blob_storage.src_customers")
+    .drop("_file", "_line", "_modified", "_fivetran_synced")
+    .withColumn("customer_name", lower(col("customer_name")))
+    .withColumn("customer_type", lower(col("customer_type")))
+)
+
+customers.write.mode("overwrite").saveAsTable("staging.stg_customers")
