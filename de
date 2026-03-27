@@ -1,0 +1,296 @@
+from pyspark.sql.functions import (
+    col, lower, upper, trim, when, current_timestamp, coalesce, expr, try_to_date,
+    regexp_replace, round, lit
+)
+
+# create staging schema
+spark.sql("CREATE SCHEMA IF NOT EXISTS staging")
+
+# set current database to staging
+spark.sql("USE staging")
+
+# customers
+customers = (
+    spark.table("azure_blob_storage.src_customers")
+    .drop("_file", "_line", "_modified", "_fivetran_synced")
+    
+    # clean and standardize text fields
+    .withColumn("customer_name", lower(trim(col("customer_name"))))
+    .withColumn("customer_type", lower(trim(col("customer_type"))))
+    .withColumn("country", upper(trim(col("country"))))
+    
+    # standardize country names
+    .withColumn(
+        "country",
+        when(col("country").isin(["USA", "U.S.A", "U.S.A.", "UNITED STATES"]), "USA")
+        .when(col("country") == "INDIA", "INDIA")
+        .when(col("country").isNull(), "NONE")
+        .otherwise(col("country"))
+    )
+    
+    # handle nulls for other fields
+    .withColumn(
+        "customer_name",
+        when(col("customer_name").isNull(), "none").otherwise(col("customer_name"))
+    )
+    .withColumn(
+        "customer_type",
+        when(col("customer_type").isNull(), "none").otherwise(col("customer_type"))
+    )
+    
+    # add metadata
+    .withColumn("ingestion_ts", current_timestamp())
+)
+
+customers.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable("stg_customers")
+
+# products
+products = (
+    spark.table("azure_blob_storage.src_products")
+    .drop("_file", "_line", "_modified", "_fivetran_synced")
+    
+    # clean text fields
+    .withColumn("product_name", lower(trim(col("product_name"))))
+    .withColumn("category", lower(trim(col("category"))))
+    
+    # handle nulls
+    .withColumn(
+        "product_name",
+        when(col("product_name").isNull(), "none").otherwise(col("product_name"))
+    )
+    .withColumn(
+        "category",
+        when(col("category").isNull(), "none").otherwise(col("category"))
+    )
+    
+    # validate cost_price (ensure positive values)
+    .withColumn(
+        "cost_price",
+        when(col("cost_price") < 0, 0).otherwise(col("cost_price"))
+    )
+    
+    # add metadata
+    .withColumn("ingestion_ts", current_timestamp())
+)
+
+products.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable("stg_products")
+
+#  invoices 
+invoices = (
+    spark.table("azure_blob_storage.src_invoices")
+    .drop("_file", "_line", "_modified", "_fivetran_synced")
+    
+    # clean text fields
+    .withColumn("invoice_status", lower(trim(col("invoice_status"))))
+    .withColumn("currency", lower(trim(col("currency"))))
+    .withColumn("region", lower(trim(col("region"))))
+    
+    # parse dates with multiple format support
+    .withColumn(
+        "invoice_date",
+        coalesce(
+            try_to_date(col("invoice_date"), "yyyy/MM/dd"),
+            try_to_date(col("invoice_date"), "yyyy/M/d"),
+            try_to_date(col("invoice_date"), "yyyy-MM-dd"),
+            try_to_date(col("invoice_date"), "MM/dd/yyyy")
+        )
+    )
+    
+    # handle nulls
+    .withColumn(
+        "invoice_status",
+        when(col("invoice_status").isNull(), "none").otherwise(col("invoice_status"))
+    )
+    .withColumn(
+        "currency",
+        when(col("currency").isNull(), "none").otherwise(col("currency"))
+    )
+    .withColumn(
+        "region",
+        when(col("region").isNull(), "none").otherwise(col("region"))
+    )
+    .withColumn(
+        "invoice_date",
+        when(col("invoice_date").isNull(), expr("current_date()")).otherwise(col("invoice_date"))
+    )
+    
+    # add metadata
+    .withColumn("ingestion_ts", current_timestamp())
+)
+
+invoices.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable("staging.stg_invoices")
+
+#  invoice line items
+invoice_line_items = (
+    spark.table("azure_blob_storage.src_invoice_line_items")
+    .drop("_file", "_line", "_modified", "_fivetran_synced")
+    
+    # handle null discounts (default to 0)
+    .withColumn(
+        "discount",
+        when(col("discount").isNull(), lit(0.0)).otherwise(col("discount"))
+    )
+    
+    # validate quantities and prices (ensure positive)
+    .withColumn(
+        "quantity",
+        when(col("quantity") < 0, 0).otherwise(col("quantity"))
+    )
+    .withColumn(
+        "unit_price",
+        when(col("unit_price") < 0, 0).otherwise(col("unit_price"))
+    )
+    
+    # calculate line total: quantity * unit_price * (1 - discount)
+    .withColumn(
+        "line_total",
+        round(col("quantity") * col("unit_price") * (lit(1) - col("discount")), 2)
+    )
+    
+    # add metadata
+    .withColumn("ingestion_ts", current_timestamp())
+)
+
+invoice_line_items.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable("stg_invoice_line_items")
+
+# payments 
+payments = (
+    spark.table("azure_blob_storage.src_payments")
+    .drop("_file", "_line", "_modified", "_fivetran_synced")
+    
+    # parse payment date with multiple format support
+    .withColumn(
+        "payment_date",
+        coalesce(
+            try_to_date(col("payment_date"), "yyyy/MM/dd"),
+            try_to_date(col("payment_date"), "yyyy/M/d"),
+            try_to_date(col("payment_date"), "yyyy-MM-dd"),
+            try_to_date(col("payment_date"), "MM/dd/yyyy")
+        )
+    )
+    
+    # clean payment method
+    .withColumn("payment_method", lower(trim(col("payment_method"))))
+    
+    # handle nulls
+    .withColumn(
+        "payment_method",
+        when(col("payment_method").isNull(), "none").otherwise(col("payment_method"))
+    )
+    
+    # validate payment amount (ensure non-negative)
+    .withColumn(
+        "payment_amount",
+        when(col("payment_amount") < 0, 0).otherwise(col("payment_amount"))
+    )
+    
+    # add metadata
+    .withColumn("ingestion_ts", current_timestamp())
+)
+
+payments.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable("staging.stg_payments")
+
+# exchange rates 
+exchange_rates = (
+    spark.table("azure_blob_storage.src_exchange_rates")
+    .drop("_file", "_line", "_modified", "_fivetran_synced")
+    
+    # clean currency
+    .withColumn("currency", lower(trim(col("currency"))))
+    
+    # parse date with multiple format support
+    .withColumn(
+        "date",
+        coalesce(
+            try_to_date(col("date"), "yyyy/MM/dd"),
+            try_to_date(col("date"), "yyyy/M/d"),
+            try_to_date(col("date"), "yyyy-MM-dd"),
+            try_to_date(col("date"), "MM/dd/yyyy")
+        )
+    )
+    
+    # handle nulls
+    .withColumn(
+        "currency",
+        when(col("currency").isNull(), "none").otherwise(col("currency"))
+    )
+    
+    # validate exchange rate (ensure positive)
+    .withColumn(
+        "rate_to_usd",
+        when(col("rate_to_usd") <= 0, lit(1.0)).otherwise(col("rate_to_usd"))
+    )
+    
+    # add metadata
+    .withColumn("ingestion_ts", current_timestamp())
+)
+
+exchange_rates.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable("staging.stg_exchange_rates")
+
+# regions
+regions = (
+    spark.table("azure_blob_storage.src_regions")
+    .drop("_file", "_line", "_modified", "_fivetran_synced")
+    
+    # clean and standardize text fields
+    .withColumn("region_name", lower(trim(col("region_name"))))
+    .withColumn("country", upper(trim(col("country"))))
+    
+    # standardize country names (consistent with customers table)
+    .withColumn(
+        "country",
+        when(col("country").isin(["USA", "U.S.A", "U.S.A.", "UNITED STATES"]), "USA")
+        .when(col("country") == "INDIA", "INDIA")
+        .when(col("country").isNull(), "NONE")
+        .otherwise(col("country"))
+    )
+    
+    # handle nulls
+    .withColumn(
+        "region_name",
+        when(col("region_name").isNull(), "none").otherwise(col("region_name"))
+    )
+    
+    # add metadata
+    .withColumn("ingestion_ts", current_timestamp())
+)
+
+regions.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable("staging.stg_regions")
+
+# validation
+print("\n=== Staging Tables Created ===")
+display(spark.sql("SHOW TABLES IN staging"))
+
+print("\n=== Sample Data Preview ===")
+print("\nCustomers (5 rows):")
+display(spark.table("staging.stg_customers").limit(5))
+
+print("\nProducts (5 rows):")
+display(spark.table("staging.stg_products").limit(5))
+
+print("\nInvoices (5 rows):")
+display(spark.table("staging.stg_invoices").limit(5))
+
+print("\nInvoice Line Items (5 rows):")
+display(spark.table("staging.stg_invoice_line_items").limit(5))
+
+print("\nPayments (5 rows):")
+display(spark.table("staging.stg_payments").limit(5))
+
+print("\nExchange Rates (5 rows):")
+display(spark.table("staging.stg_exchange_rates").limit(5))
+
+print("\nRegions (all rows):")
+display(spark.table("staging.stg_regions"))
+
+# data quality summary
+print("\n=== Data Quality Summary ===")
+
+print("\nCustomers - Record Count:")
+display(spark.table("staging.stg_customers").count())
+
+print("\nInvoices - Record Count:")
+display(spark.table("staging.stg_invoices").count())
+
+print("\nInvoice Line Items - Record Count:")
+display(spark.table("staging.stg_invoice_line_items").count())
