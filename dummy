@@ -1,1 +1,88 @@
-hi
+Unique values in Justification_Category:
+<StringArray>
+[                                               nan,
+                                 'Value of product',
+                                   'Change in band',
+                                 'External factors',
+                            'Other (misidentified)',
+                                'Incentive offered',
+                                    'Not Mentioned',
+                 'Discount removal / VAT inclusion',
+               'Payment terms / renewal conditions',
+ 'Compliance / Accreditation / Certification Value',
+                     'Pricing Adjustments increase',
+                     'Pricing Adjustments decrease',
+                                 'External_factors',
+                        'Membership / Subscription',
+                                 'Value_of_product',
+                                'Change in package',
+                                'Change_in_package',
+                 'Discount_removal / VAT_inclusion',
+                        'Pricing / Cost / Payments',
+                           'Discounts / incentives',
+  'Business Operational Efficiency / Justification',
+            'Customer Support / Service Excellence',
+                           'Employee Count / Value',
+              'Contractual / Documentation Clarity',
+                    'Payment Flexibility / Options',
+               'Payment_terms / renewal_conditions',
+                                   'Change_in_band',
+                     'Renewal / Upgrade Incentives',
+                          'Value Proposition / ROI',
+                      'Market / Industry Alignment',
+     'Technology / System Reliability / Investment']
+Length: 31, dtype: str
+
+Unique values in Reason_For_Renewal_Category:
+<StringArray>
+[                                 nan,              'Other (misidentified)',
+        'Incentive / support offered',         'Price adjustments increase',
+         'Accreditation / Compliance',             'Discounts / incentives',
+         'Strong client relationship', 'Payment terms / renewal conditions',
+                   'Value of product',          'Pricing / Cost / Payments',
+                'Payment convenience',       'Communication / Transparency',
+         'Price adjustments decrease',        'Product Features / Upgrades',
+      'Contractual and Legal Aspects',      'Customer Relationship / Value',
+         'Customer support / service',      'Membership / Loyalty Benefits',
+      'Business Growth / Development',       'Training / Skill Development',
+      'Service Quality / Reliability',      'Miscellaneous / Uncategorized',
+                      'Not Mentioned',                   'Security / Trust']
+Length: 24, dtype: str
+
+Unique values in Agent_Response_To_Cancel_Category:
+<StringArray>
+[                                 nan,        'Adjusted account or package',
+              'Other (misidentified)', 'Payment terms / renewal conditions',
+                   'Value of product',        'Incentive / support offered',
+ 'Pricing / Financial considerations',         'Cancellation / Termination',
+               'Negotiation / Review', 'Membership / Partnerships benefits',
+                'Offers / Incentives',         'Accreditation / Compliance',
+        'Customer Retention / Growth',          'Payment / Billing options',
+                'Payment convenience',         'Customer Service / Support',
+       'Customer Feedback / Concerns', 'Account Management / Relationships',
+                      'Not Mentioned',             'Contracts / Agreements',
+      'Service / Product Improvement',     'Communication / Responsiveness',
+      'Uncategorized / Miscellaneous']
+Length: 23, dtype: str
+
+Unique values in Argument_That_Convinced_Customer_to_Stay_Category:
+<StringArray>
+[                                        nan,
+               'Incentive / support offered',
+ 'Financial Incentives / Cost-Effectiveness',
+        'Accreditation / Compliance / Trust',
+                'Customer Service / Support',
+           'Business Growth / Opportunities',
+                'Non-Renewal / Cancellation',
+              'Value Proposition / Benefits',
+        'Payment Transparency / Flexibility',
+                              'Cancellation',
+                     'Other (misidentified)',
+                'Strong client relationship',
+                          'Value of product',
+                       'Payment convenience',
+                             'Not Mentioned',
+             'Communication / Relationships',
+              'Contract / Renewal Processes',
+        'Payment terms / renewal conditions']
+Length: 18, dtype: str
