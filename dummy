@@ -1,61 +1,63 @@
-PS C:\Users\AswathKS\Desktop\Personal Expense Tracker> uvicorn app:app --reload
-INFO:     Will watch for changes in these directories: ['C:\\Users\\AswathKS\\Desktop\\Personal Expense Tracker']
-INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process [10024] using WatchFiles
-ERROR:    Error loading ASGI app. Could not import module "app".
-5. Run FastAPI
-Inside terminal:
-Bash
-cd backend
-uvicorn app:app --reload
-You should see:
-Plain text
-Uvicorn running on http://127.0.0.1:8000
-6. Open Swagger UI
-Open browser:
-Plain text
-http://127.0.0.1:8000/docs
-You will see:
-Plain text
-POST /upload-file
-Click it.
-7. Upload image
-Use one of your receipt images first.
-Example:
-Plain text
-apple_receipt.jpg
-Choose:
-Plain text
-file_type = receipt
-Then click:
-Plain text
-Execute
-8. Expected output
-You should get response like:
-JSON
-{
-  "status": "success",
-  "file_name": "apple_receipt.jpg",
-  "file_type": "receipt",
-  "saved_image_path": "...",
-  "saved_text_path": "...",
-  "ocr_text": "Apple Store Receipt..."
-}
-After Step 1 success
-Checklist:
-Plain text
-✅ Image upload works
-✅ OCR text extracted
-✅ OCR text saved as .txt
+import re
 
-NEXT:
-⬜ Parser
-⬜ SQLite
-⬜ Categorization
-⬜ Dashboard
-⬜ Embeddings
-⬜ RAG chatbot
-⬜ n8n automation
-Your task now
-Complete only this first.
-Do not move to Step 2 until OCR works perfectly.
+
+def parse_receipt_text(text, file_name):
+    """
+    Extract vendor, date, total amount, payment method
+    from OCR extracted text
+    """
+
+    lines = text.split("\n")
+    lines = [line.strip() for line in lines if line.strip()]
+
+    # Vendor = usually first line
+    vendor = lines[0] if lines else "Unknown"
+
+    # Find total amount
+    total_amount = 0
+
+    total_patterns = [
+        r"TOTAL[:\s\$₹€]*([\d,]+\.?\d*)",
+        r"Total[:\s\$₹€]*([\d,]+\.?\d*)",
+        r"total[:\s\$₹€]*([\d,]+\.?\d*)"
+    ]
+
+    for pattern in total_patterns:
+        match = re.search(pattern, text)
+        if match:
+            total_amount = float(match.group(1).replace(",", ""))
+            break
+
+    # Find date
+    date = "Not Found"
+
+    date_patterns = [
+        r"\w+\s\d{1,2}(st|nd|rd|th)?,\s\d{4}",
+        r"\d{2}/\d{2}/\d{4}",
+        r"\d{4}-\d{2}-\d{2}"
+    ]
+
+    for pattern in date_patterns:
+        match = re.search(pattern, text)
+        if match:
+            date = match.group(0)
+            break
+
+    # Payment method
+    payment_method = "Unknown"
+
+    if "CREDIT CARD" in text.upper():
+        payment_method = "Credit Card"
+    elif "CASH" in text.upper():
+        payment_method = "Cash"
+    elif "UPI" in text.upper():
+        payment_method = "UPI"
+
+    return {
+        "file_name": file_name,
+        "vendor": vendor,
+        "date": date,
+        "total_amount": total_amount,
+        "payment_method": payment_method,
+        "raw_text": text
+    }
