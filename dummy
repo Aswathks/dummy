@@ -1,93 +1,121 @@
+import streamlit as st
+import pandas as pd
 import sqlite3
+import requests
 from pathlib import Path
-
-from embedding_service import search_similar_transactions
+import matplotlib.pyplot as plt
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = BASE_DIR / "database" / "expense_tracker.db"
 
+FASTAPI_URL = "http://127.0.0.1:8000"
 
-def get_sql_answer(question):
-    question = question.lower()
 
+st.set_page_config(
+    page_title="Personal Expense Tracker",
+    layout="wide"
+)
+
+st.title("Personal Expense Tracker Dashboard")
+
+
+def load_data():
     conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
 
-    answer = None
-
-    if "total" in question or "overall" in question or "spent" in question:
-        cursor.execute("SELECT SUM(total_amount) FROM transactions")
-        result = cursor.fetchone()[0]
-        answer = f"Your total spending is {result:.2f}"
-
-    elif "food" in question:
-        cursor.execute("""
-            SELECT SUM(total_amount)
-            FROM transactions
-            WHERE category = 'Food'
-        """)
-        result = cursor.fetchone()[0]
-        answer = f"Your total food spending is {result:.2f}"
-
-    elif "highest" in question or "biggest" in question or "top expense" in question:
-        cursor.execute("""
-            SELECT vendor, total_amount, category
-            FROM transactions
-            ORDER BY total_amount DESC
-            LIMIT 1
-        """)
-        result = cursor.fetchone()
-
-        if result:
-            answer = f"Your highest expense is {result[0]} with amount {result[1]:.2f} under {result[2]} category."
-
-    elif "credit card" in question:
-        cursor.execute("""
-            SELECT SUM(total_amount)
-            FROM transactions
-            WHERE payment_method = 'Credit Card'
-        """)
-        result = cursor.fetchone()[0]
-        answer = f"Your credit card spending is {result:.2f}"
+    df = pd.read_sql_query("""
+        SELECT id, file_name, vendor, date, total_amount, payment_method, category
+        FROM transactions
+        ORDER BY id DESC
+    """, conn)
 
     conn.close()
-    return answer
+    return df
 
 
-def get_rag_answer(question):
-    results = search_similar_transactions(question, top_k=5)
+df = load_data()
 
-    documents = results.get("documents", [[]])[0]
-
-    if not documents:
-        return "I could not find related expense records."
-
-    context = "\n\n".join(documents)
-
-    answer = f"""
-Based on your uploaded expense records:
-
-{context}
-
-Answer:
-{question}
-"""
-
-    return answer.strip()
+if df.empty:
+    st.warning("No transactions found. Upload a receipt first.")
+    st.stop()
 
 
-def answer_question(question):
-    sql_answer = get_sql_answer(question)
+# ---------------- KPI SECTION ----------------
 
-    if sql_answer:
-        return {
-            "answer_type": "SQL",
-            "answer": sql_answer
-        }
+total_spent = df["total_amount"].sum()
+total_transactions = len(df)
+top_category = df.groupby("category")["total_amount"].sum().idxmax()
+top_vendor = df.sort_values(by="total_amount", ascending=False).iloc[0]["vendor"]
 
-    rag_answer = get_rag_answer(question)
+col1, col2, col3, col4 = st.columns(4)
 
-    return {
-        "answer_type": "RAG",
-        "answer": rag_answer
-    }
+col1.metric("Total Spent", f"₹ {total_spent:.2f}")
+col2.metric("Transactions", total_transactions)
+col3.metric("Top Category", top_category)
+col4.metric("Top Vendor", top_vendor)
+
+
+st.divider()
+
+
+# ---------------- DATA TABLE ----------------
+
+st.subheader("All Transactions")
+st.dataframe(df, use_container_width=True)
+
+
+# ---------------- CATEGORY SUMMARY ----------------
+
+st.subheader("Category-wise Spending")
+
+category_df = df.groupby("category")["total_amount"].sum().reset_index()
+
+st.dataframe(category_df, use_container_width=True)
+
+fig, ax = plt.subplots()
+ax.bar(category_df["category"], category_df["total_amount"])
+ax.set_xlabel("Category")
+ax.set_ylabel("Amount")
+ax.set_title("Spending by Category")
+st.pyplot(fig)
+
+
+# ---------------- TOP EXPENSES ----------------
+
+st.subheader("Top Expenses")
+
+top_expenses = df.sort_values(by="total_amount", ascending=False).head(10)
+
+st.dataframe(top_expenses, use_container_width=True)
+
+fig2, ax2 = plt.subplots()
+ax2.bar(top_expenses["vendor"], top_expenses["total_amount"])
+ax2.set_xlabel("Vendor")
+ax2.set_ylabel("Amount")
+ax2.set_title("Top Expenses")
+plt.xticks(rotation=45)
+st.pyplot(fig2)
+
+
+# ---------------- CHATBOT ----------------
+
+st.divider()
+
+st.subheader("Ask Your Expense Chatbot")
+
+question = st.text_input("Ask a question about your expenses")
+
+if st.button("Ask"):
+    if question.strip() == "":
+        st.warning("Please enter a question.")
+    else:
+        response = requests.get(
+            f"{FASTAPI_URL}/chat",
+            params={"question": question}
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            st.success(result["response"]["answer"])
+            st.caption(f"Answer Type: {result['response']['answer_type']}")
+        else:
+            st.error("Chatbot API error.")
