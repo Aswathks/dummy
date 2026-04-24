@@ -2,24 +2,20 @@ import re
 
 
 def parse_receipt_text(text, file_name):
-    """
-    Extract vendor, date, total amount, payment method
-    from OCR extracted text
-    """
-
     lines = text.split("\n")
     lines = [line.strip() for line in lines if line.strip()]
 
-    # Vendor = usually first line
+    # Vendor name usually comes in first line
     vendor = lines[0] if lines else "Unknown"
 
-    # Find total amount
+    # Extract total amount
     total_amount = 0
 
     total_patterns = [
         r"TOTAL[:\s\$₹€]*([\d,]+\.?\d*)",
         r"Total[:\s\$₹€]*([\d,]+\.?\d*)",
-        r"total[:\s\$₹€]*([\d,]+\.?\d*)"
+        r"total[:\s\$₹€]*([\d,]+\.?\d*)",
+        r"TOTAL\s*\$?\s*([\d,]+\.?\d*)"
     ]
 
     for pattern in total_patterns:
@@ -28,12 +24,13 @@ def parse_receipt_text(text, file_name):
             total_amount = float(match.group(1).replace(",", ""))
             break
 
-    # Find date
+    # Extract date
     date = "Not Found"
 
     date_patterns = [
-        r"\w+\s\d{1,2}(st|nd|rd|th)?,\s\d{4}",
+        r"[A-Za-z]+\s\d{1,2}(st|nd|rd|th)?,\s\d{4}",
         r"\d{2}/\d{2}/\d{4}",
+        r"\d{2}-\d{2}-\d{4}",
         r"\d{4}-\d{2}-\d{2}"
     ]
 
@@ -43,15 +40,21 @@ def parse_receipt_text(text, file_name):
             date = match.group(0)
             break
 
-    # Payment method
+    # Extract payment method
     payment_method = "Unknown"
 
-    if "CREDIT CARD" in text.upper():
+    upper_text = text.upper()
+
+    if "CREDIT CARD" in upper_text:
         payment_method = "Credit Card"
-    elif "CASH" in text.upper():
+    elif "DEBIT CARD" in upper_text:
+        payment_method = "Debit Card"
+    elif "CASH" in upper_text:
         payment_method = "Cash"
-    elif "UPI" in text.upper():
+    elif "UPI" in upper_text:
         payment_method = "UPI"
+    elif "VISA" in upper_text:
+        payment_method = "Visa Card"
 
     return {
         "file_name": file_name,
@@ -60,4 +63,82 @@ def parse_receipt_text(text, file_name):
         "total_amount": total_amount,
         "payment_method": payment_method,
         "raw_text": text
+    }
+.....
+from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
+from pathlib import Path
+import shutil
+
+from ocr_service import extract_text_from_image
+from parser import parse_receipt_text
+
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+RECEIPT_FOLDER = BASE_DIR / "backend" / "temp_uploads" / "receipts"
+BANK_FOLDER = BASE_DIR / "backend" / "temp_uploads" / "bank_statements"
+
+TEXT_RECEIPT_FOLDER = BASE_DIR / "exports" / "extracted_text" / "receipts"
+TEXT_BANK_FOLDER = BASE_DIR / "exports" / "extracted_text" / "bank_statements"
+
+RECEIPT_FOLDER.mkdir(parents=True, exist_ok=True)
+BANK_FOLDER.mkdir(parents=True, exist_ok=True)
+TEXT_RECEIPT_FOLDER.mkdir(parents=True, exist_ok=True)
+TEXT_BANK_FOLDER.mkdir(parents=True, exist_ok=True)
+
+
+@app.get("/")
+def home():
+    return {"message": "Personal Expense Tracker API Running"}
+
+
+@app.post("/upload-file")
+def upload_file(
+    file: UploadFile = File(...),
+    file_type: str = "receipt"
+):
+    # choose folder based on file type
+    if file_type == "bank_statement":
+        save_folder = BANK_FOLDER
+        text_folder = TEXT_BANK_FOLDER
+    else:
+        save_folder = RECEIPT_FOLDER
+        text_folder = TEXT_RECEIPT_FOLDER
+
+    # save uploaded image
+    save_path = save_folder / file.filename
+
+    with open(save_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # OCR extraction
+    extracted_text = extract_text_from_image(save_path)
+
+    # save OCR text
+    text_file_path = text_folder / f"{Path(file.filename).stem}.txt"
+
+    with open(text_file_path, "w", encoding="utf-8") as f:
+        f.write(extracted_text)
+
+    # parse receipt text
+    parsed_data = parse_receipt_text(extracted_text, file.filename)
+
+    return {
+        "status": "success",
+        "file_name": file.filename,
+        "file_type": file_type,
+        "saved_image_path": str(save_path),
+        "saved_text_path": str(text_file_path),
+        "parsed_data": parsed_data,
+        "ocr_text": extracted_text
     }
