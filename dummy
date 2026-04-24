@@ -252,23 +252,17 @@ def main():
 if __name__ == "__main__":
     main()
 
-......
+....//....
 PS C:\Users\AswathKS\Desktop\Personal Expense Tracker> python backend/ocr_service.py
 C:\Users\AswathKS\AppData\Local\Programs\Python\Python311\Lib\site-packages\requests\__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.4.3)/charset_normalizer (3.4.4) doesn't match a supported version!
   warnings.warn(
 INFO: Could not find files for the given pattern(s).
 C:\Users\AswathKS\AppData\Local\Programs\Python\Python311\Lib\site-packages\paddle\utils\cpp_extension\extension_utils.py:712: UserWarning: No ccache found. Please be aware that recompiling all source files may be required. You can download and install ccache from: https://github.com/ccache/ccache/blob/master/doc/INSTALL.md
   warnings.warn(warning_message)
-Creating model: ('PP-LCNet_x1_0_doc_ori', None, None)
-Model files already exist. Using cached files. To redownload, please delete the directory manually: `C:\Users\AswathKS\.paddlex\official_models\PP-LCNet_x1_0_doc_ori`.
-WARNING: Logging before InitGoogleLogging() is written to STDERR
-I0424 10:02:58.337586 11728 onednn_context.cc:81] oneDNN v3.6.2
-Creating model: ('UVDoc', None, None)
-Model files already exist. Using cached files. To redownload, please delete the directory manually: `C:\Users\AswathKS\.paddlex\official_models\UVDoc`.
-Creating model: ('PP-LCNet_x1_0_textline_ori', None, None)
-Model files already exist. Using cached files. To redownload, please delete the directory manually: `C:\Users\AswathKS\.paddlex\official_models\PP-LCNet_x1_0_textline_ori`.
 Creating model: ('PP-OCRv5_server_det', None, None)
 Model files already exist. Using cached files. To redownload, please delete the directory manually: `C:\Users\AswathKS\.paddlex\official_models\PP-OCRv5_server_det`.
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I0424 10:07:20.411846 17808 onednn_context.cc:81] oneDNN v3.6.2
 Creating model: ('en_PP-OCRv5_mobile_rec', None, None)
 Model files already exist. Using cached files. To redownload, please delete the directory manually: `C:\Users\AswathKS\.paddlex\official_models\en_PP-OCRv5_mobile_rec`.
 OCR started
@@ -277,161 +271,38 @@ Checking: C:\Users\AswathKS\Desktop\Personal Expense Tracker\data\raw\receipts
 Found 4 files
 
 Processing: Receipt 1.webp
-C:\Users\AswathKS\Desktop\Personal Expense Tracker\backend\ocr_service.py:85: DeprecationWarning: Please use `predict` instead.
-  result = ocr.ocr(image)
-Traceback (most recent call last):
-  File "C:\Users\AswathKS\Desktop\Personal Expense Tracker\backend\ocr_service.py", line 127, in <module>
-    process_folder(RECEIPT_PATH, RECEIPT_OUT_TXT, RECEIPT_OUT_JSON)
-  File "C:\Users\AswathKS\Desktop\Personal Expense Tracker\backend\ocr_service.py", line 102, in process_folder
-    lines, text = run_ocr(file_path)
-                  ^^^^^^^^^^^^^^^^^^
-  File "C:\Users\AswathKS\Desktop\Personal Expense Tracker\backend\ocr_service.py", line 85, in run_ocr
-    result = ocr.ocr(image)
-             ^^^^^^^^^^^^^^
-  File "C:\Users\AswathKS\AppData\Roaming\Python\Python311\site-packages\typing_extensions.py", line 3004, in wrapper
-    return arg(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\AswathKS\AppData\Local\Programs\Python\Python311\Lib\site-packages\paddleocr\_pipelines\ocr.py", line 231, in ocr
-    return self.predict(img, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\AswathKS\AppData\Local\Programs\Python\Python311\Lib\site-packages\paddleocr\_pipelines\ocr.py", line 213, in predict
-    return list(
-           ^^^^^
-  File "C:\Users\AswathKS\AppData\Local\Programs\Python\Python311\Lib\site-packages\paddlex\inference\pipelines\_parallel.py", line 161, in predict
-    yield from self._pipeline.predict(
-  File "C:\Users\AswathKS\AppData\Local\Programs\Python\Python311\Lib\site-packages\paddlex\inference\pipelines\ocr\pipeline.py", line 366, in predict
-    det_results = list(
-                  ^^^^^
-  File "C:\Users\AswathKS\AppData\Local\Programs\Python\Python311\Lib\site-packages\paddlex\inference\models\predictors\base_predictor.py", line 117, in __call__
-    yield from self.apply(input, **kwargs)
-  File "C:\Users\AswathKS\AppData\Local\Programs\Python\Python311\Lib\site-packages\paddlex\inference\models\predictors\base_predictor.py", line 140, in apply
-    pred = self.process(batch_data, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\AswathKS\AppData\Local\Programs\Python\Python311\Lib\site-packages\paddlex\inference\models\text_detection\predictor.py", line 136, in process
-    batch_preds = self.runner(x=x)
-                  ^^^^^^^^^^^^^^^^
-  File "C:\Users\AswathKS\AppData\Local\Programs\Python\Python311\Lib\site-packages\paddlex\inference\models\runners\paddle_static\runner.py", line 297, in __call__
-    pred = self.infer(x)
-           ^^^^^^^^^^^^^
-  File "C:\Users\AswathKS\AppData\Local\Programs\Python\Python311\Lib\site-packages\paddlex\inference\models\runners\paddle_static\runner.py", line 265, in __call__
-    self.predictor.run()
-NotImplementedError: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at ..\paddle\fluid\framework\new_executor\instruction\onednn\onednn_instruction.cc:118)
- .....
-import os
-
-# IMPORTANT: must be before importing paddleocr
-os.environ["FLAGS_use_mkldnn"] = "0"
-os.environ["FLAGS_enable_pir_api"] = "0"
-
-from pathlib import Path
-import json
-import cv2
-from paddleocr import PaddleOCR
+ERROR processing Receipt 1.webp: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at ..\paddle\fluid\framework\new_executor\instruction\onednn\onednn_instruction.cc:118)
 
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-RECEIPT_PATH = BASE_DIR / "data" / "raw" / "receipts"
-BANK_PATH = BASE_DIR / "data" / "raw" / "bank_statements"
-
-RECEIPT_OUT_TXT = BASE_DIR / "data" / "extracted_text" / "receipts"
-BANK_OUT_TXT = BASE_DIR / "data" / "extracted_text" / "bank_statements"
-
-RECEIPT_OUT_JSON = BASE_DIR / "data" / "parsed_json" / "receipts"
-BANK_OUT_JSON = BASE_DIR / "data" / "parsed_json" / "bank_statements"
-
-VALID_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
-
-for folder in [RECEIPT_OUT_TXT, BANK_OUT_TXT, RECEIPT_OUT_JSON, BANK_OUT_JSON]:
-    folder.mkdir(parents=True, exist_ok=True)
+Processing: Receipt 2.webp
+ERROR processing Receipt 2.webp: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at ..\paddle\fluid\framework\new_executor\instruction\onednn\onednn_instruction.cc:118)
 
 
-ocr = PaddleOCR(
-    lang="en",
-    use_doc_orientation_classify=False,
-    use_doc_unwarping=False,
-    use_textline_orientation=False
-)
+Processing: Receipt 3.png
+ERROR processing Receipt 3.png: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at ..\paddle\fluid\framework\new_executor\instruction\onednn\onednn_instruction.cc:118)
 
 
-def extract_text_from_result(result):
-    lines = []
-
-    if not result:
-        return lines
-
-    for page in result:
-        if isinstance(page, dict):
-            texts = page.get("rec_texts", [])
-            scores = page.get("rec_scores", [])
-
-            for i, text in enumerate(texts):
-                lines.append({
-                    "text": str(text),
-                    "score": float(scores[i]) if i < len(scores) else 0.0
-                })
-
-        elif isinstance(page, list):
-            for item in page:
-                try:
-                    text = item[1][0]
-                    score = float(item[1][1])
-                    lines.append({
-                        "text": str(text),
-                        "score": score
-                    })
-                except Exception:
-                    pass
-
-    return lines
+Processing: Receipt 4.webp
+ERROR processing Receipt 4.webp: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at ..\paddle\fluid\framework\new_executor\instruction\onednn\onednn_instruction.cc:118)
 
 
-def run_ocr(image_path):
-    result = ocr.predict(str(image_path))
-    lines = extract_text_from_result(result)
-    text = "\n".join([line["text"] for line in lines if line["text"].strip()])
-    return lines, text
+Checking: C:\Users\AswathKS\Desktop\Personal Expense Tracker\data\raw\bank_statements
+Found 4 files
+
+Processing: BankStatement 1.png
+ERROR processing BankStatement 1.png: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at ..\paddle\fluid\framework\new_executor\instruction\onednn\onednn_instruction.cc:118)
 
 
-def process_folder(input_dir, txt_dir, json_dir):
-    print(f"\nChecking: {input_dir}")
-
-    files = sorted([f for f in input_dir.iterdir() if f.suffix.lower() in VALID_EXTENSIONS])
-    print(f"Found {len(files)} files")
-
-    for file_path in files:
-        print(f"\nProcessing: {file_path.name}")
-
-        try:
-            lines, text = run_ocr(file_path)
-
-            txt_path = txt_dir / f"{file_path.stem}.txt"
-            json_path = json_dir / f"{file_path.stem}.json"
-
-            with open(txt_path, "w", encoding="utf-8") as f:
-                f.write(text)
-
-            with open(json_path, "w", encoding="utf-8") as f:
-                json.dump({
-                    "file_name": file_path.name,
-                    "raw_text": text,
-                    "ocr_lines": lines
-                }, f, indent=2, ensure_ascii=False)
-
-            print(f"Extracted lines: {len(lines)}")
-            print(f"Saved TXT: {txt_path}")
-
-            if not text.strip():
-                print("WARNING: No text extracted")
-
-        except Exception as e:
-            print(f"ERROR processing {file_path.name}: {e}")
+Processing: BankStatement 2.png
+ERROR processing BankStatement 2.png: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at ..\paddle\fluid\framework\new_executor\instruction\onednn\onednn_instruction.cc:118)
 
 
-if __name__ == "__main__":
-    print("OCR started")
+Processing: BankStatement 3.webp
+ERROR processing BankStatement 3.webp: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at ..\paddle\fluid\framework\new_executor\instruction\onednn\onednn_instruction.cc:118)
 
-    process_folder(RECEIPT_PATH, RECEIPT_OUT_TXT, RECEIPT_OUT_JSON)
-    process_folder(BANK_PATH, BANK_OUT_TXT, BANK_OUT_JSON)
 
-    print("\nOCR completed")
+Processing: BankStatement 4.png
+ERROR processing BankStatement 4.png: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at ..\paddle\fluid\framework\new_executor\instruction\onednn\onednn_instruction.cc:118)
+
+
+OCR completed
