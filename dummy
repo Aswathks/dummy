@@ -1,3 +1,96 @@
+from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
+from pathlib import Path
+import shutil
+
+from ocr_service import extract_text_from_image
+from parser import parse_receipt_text
+from categorize import categorize_transaction
+from db_service import insert_transaction, get_all_transactions
+
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+RECEIPT_FOLDER = BASE_DIR / "backend" / "temp_uploads" / "receipts"
+BANK_FOLDER = BASE_DIR / "backend" / "temp_uploads" / "bank_statements"
+
+TEXT_RECEIPT_FOLDER = BASE_DIR / "exports" / "extracted_text" / "receipts"
+TEXT_BANK_FOLDER = BASE_DIR / "exports" / "extracted_text" / "bank_statements"
+
+RECEIPT_FOLDER.mkdir(parents=True, exist_ok=True)
+BANK_FOLDER.mkdir(parents=True, exist_ok=True)
+TEXT_RECEIPT_FOLDER.mkdir(parents=True, exist_ok=True)
+TEXT_BANK_FOLDER.mkdir(parents=True, exist_ok=True)
+
+
+@app.get("/")
+def home():
+    return {"message": "Personal Expense Tracker API Running"}
+
+
+@app.post("/upload-file")
+def upload_file(
+    file: UploadFile = File(...),
+    file_type: str = "receipt"
+):
+    if file_type == "bank_statement":
+        save_folder = BANK_FOLDER
+        text_folder = TEXT_BANK_FOLDER
+    else:
+        save_folder = RECEIPT_FOLDER
+        text_folder = TEXT_RECEIPT_FOLDER
+
+    save_path = save_folder / file.filename
+
+    with open(save_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # OCR
+    extracted_text = extract_text_from_image(save_path)
+
+    # Save OCR text
+    text_file_path = text_folder / f"{Path(file.filename).stem}.txt"
+
+    with open(text_file_path, "w", encoding="utf-8") as f:
+        f.write(extracted_text)
+
+    # Parse receipt text
+    parsed_data = parse_receipt_text(extracted_text, file.filename)
+
+    # Categorize transaction
+    category = categorize_transaction(extracted_text, parsed_data["vendor"])
+    parsed_data["category"] = category
+
+    # Save to SQLite
+    insert_transaction(parsed_data)
+
+    return {
+        "status": "success",
+        "file_name": file.filename,
+        "file_type": file_type,
+        "saved_image_path": str(save_path),
+        "saved_text_path": str(text_file_path),
+        "parsed_data": parsed_data
+    }
+
+
+@app.get("/transactions")
+def transactions():
+    rows = get_all_transactions()
+
+    return {
+        "total_transactions": len(rows),
+        "data": rows
+    }......
 import sqlite3
 from pathlib import Path
 
@@ -17,6 +110,7 @@ def create_tables():
             date TEXT,
             total_amount REAL,
             payment_method TEXT,
+            category TEXT,
             raw_text TEXT
         )
     """)
@@ -33,14 +127,15 @@ def insert_transaction(data):
 
     cursor.execute("""
         INSERT INTO transactions
-        (file_name, vendor, date, total_amount, payment_method, raw_text)
-        VALUES (?, ?, ?, ?, ?, ?)
+        (file_name, vendor, date, total_amount, payment_method, category, raw_text)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
     """, (
         data["file_name"],
         data["vendor"],
         data["date"],
         data["total_amount"],
         data["payment_method"],
+        data["category"],
         data["raw_text"]
     ))
 
@@ -55,7 +150,7 @@ def get_all_transactions():
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT id, file_name, vendor, date, total_amount, payment_method
+        SELECT id, file_name, vendor, date, total_amount, payment_method, category
         FROM transactions
     """)
 
