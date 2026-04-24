@@ -316,4 +316,122 @@ Traceback (most recent call last):
   File "C:\Users\AswathKS\AppData\Local\Programs\Python\Python311\Lib\site-packages\paddlex\inference\models\runners\paddle_static\runner.py", line 265, in __call__
     self.predictor.run()
 NotImplementedError: (Unimplemented) ConvertPirAttribute2RuntimeAttribute not support [pir::ArrayAttribute<pir::DoubleAttribute>]  (at ..\paddle\fluid\framework\new_executor\instruction\onednn\onednn_instruction.cc:118)
+ .....
+import os
 
+# IMPORTANT: must be before importing paddleocr
+os.environ["FLAGS_use_mkldnn"] = "0"
+os.environ["FLAGS_enable_pir_api"] = "0"
+
+from pathlib import Path
+import json
+import cv2
+from paddleocr import PaddleOCR
+
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+RECEIPT_PATH = BASE_DIR / "data" / "raw" / "receipts"
+BANK_PATH = BASE_DIR / "data" / "raw" / "bank_statements"
+
+RECEIPT_OUT_TXT = BASE_DIR / "data" / "extracted_text" / "receipts"
+BANK_OUT_TXT = BASE_DIR / "data" / "extracted_text" / "bank_statements"
+
+RECEIPT_OUT_JSON = BASE_DIR / "data" / "parsed_json" / "receipts"
+BANK_OUT_JSON = BASE_DIR / "data" / "parsed_json" / "bank_statements"
+
+VALID_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+
+for folder in [RECEIPT_OUT_TXT, BANK_OUT_TXT, RECEIPT_OUT_JSON, BANK_OUT_JSON]:
+    folder.mkdir(parents=True, exist_ok=True)
+
+
+ocr = PaddleOCR(
+    lang="en",
+    use_doc_orientation_classify=False,
+    use_doc_unwarping=False,
+    use_textline_orientation=False
+)
+
+
+def extract_text_from_result(result):
+    lines = []
+
+    if not result:
+        return lines
+
+    for page in result:
+        if isinstance(page, dict):
+            texts = page.get("rec_texts", [])
+            scores = page.get("rec_scores", [])
+
+            for i, text in enumerate(texts):
+                lines.append({
+                    "text": str(text),
+                    "score": float(scores[i]) if i < len(scores) else 0.0
+                })
+
+        elif isinstance(page, list):
+            for item in page:
+                try:
+                    text = item[1][0]
+                    score = float(item[1][1])
+                    lines.append({
+                        "text": str(text),
+                        "score": score
+                    })
+                except Exception:
+                    pass
+
+    return lines
+
+
+def run_ocr(image_path):
+    result = ocr.predict(str(image_path))
+    lines = extract_text_from_result(result)
+    text = "\n".join([line["text"] for line in lines if line["text"].strip()])
+    return lines, text
+
+
+def process_folder(input_dir, txt_dir, json_dir):
+    print(f"\nChecking: {input_dir}")
+
+    files = sorted([f for f in input_dir.iterdir() if f.suffix.lower() in VALID_EXTENSIONS])
+    print(f"Found {len(files)} files")
+
+    for file_path in files:
+        print(f"\nProcessing: {file_path.name}")
+
+        try:
+            lines, text = run_ocr(file_path)
+
+            txt_path = txt_dir / f"{file_path.stem}.txt"
+            json_path = json_dir / f"{file_path.stem}.json"
+
+            with open(txt_path, "w", encoding="utf-8") as f:
+                f.write(text)
+
+            with open(json_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "file_name": file_path.name,
+                    "raw_text": text,
+                    "ocr_lines": lines
+                }, f, indent=2, ensure_ascii=False)
+
+            print(f"Extracted lines: {len(lines)}")
+            print(f"Saved TXT: {txt_path}")
+
+            if not text.strip():
+                print("WARNING: No text extracted")
+
+        except Exception as e:
+            print(f"ERROR processing {file_path.name}: {e}")
+
+
+if __name__ == "__main__":
+    print("OCR started")
+
+    process_folder(RECEIPT_PATH, RECEIPT_OUT_TXT, RECEIPT_OUT_JSON)
+    process_folder(BANK_PATH, BANK_OUT_TXT, BANK_OUT_JSON)
+
+    print("\nOCR completed")
