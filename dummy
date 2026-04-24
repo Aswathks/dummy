@@ -1,88 +1,253 @@
-Unique values in Justification_Category:
-<StringArray>
-[                                               nan,
-                                 'Value of product',
-                                   'Change in band',
-                                 'External factors',
-                            'Other (misidentified)',
-                                'Incentive offered',
-                                    'Not Mentioned',
-                 'Discount removal / VAT inclusion',
-               'Payment terms / renewal conditions',
- 'Compliance / Accreditation / Certification Value',
-                     'Pricing Adjustments increase',
-                     'Pricing Adjustments decrease',
-                                 'External_factors',
-                        'Membership / Subscription',
-                                 'Value_of_product',
-                                'Change in package',
-                                'Change_in_package',
-                 'Discount_removal / VAT_inclusion',
-                        'Pricing / Cost / Payments',
-                           'Discounts / incentives',
-  'Business Operational Efficiency / Justification',
-            'Customer Support / Service Excellence',
-                           'Employee Count / Value',
-              'Contractual / Documentation Clarity',
-                    'Payment Flexibility / Options',
-               'Payment_terms / renewal_conditions',
-                                   'Change_in_band',
-                     'Renewal / Upgrade Incentives',
-                          'Value Proposition / ROI',
-                      'Market / Industry Alignment',
-     'Technology / System Reliability / Investment']
-Length: 31, dtype: str
+from pathlib import Path
+import json
+import cv2
+from paddleocr import PaddleOCR
 
-Unique values in Reason_For_Renewal_Category:
-<StringArray>
-[                                 nan,              'Other (misidentified)',
-        'Incentive / support offered',         'Price adjustments increase',
-         'Accreditation / Compliance',             'Discounts / incentives',
-         'Strong client relationship', 'Payment terms / renewal conditions',
-                   'Value of product',          'Pricing / Cost / Payments',
-                'Payment convenience',       'Communication / Transparency',
-         'Price adjustments decrease',        'Product Features / Upgrades',
-      'Contractual and Legal Aspects',      'Customer Relationship / Value',
-         'Customer support / service',      'Membership / Loyalty Benefits',
-      'Business Growth / Development',       'Training / Skill Development',
-      'Service Quality / Reliability',      'Miscellaneous / Uncategorized',
-                      'Not Mentioned',                   'Security / Trust']
-Length: 24, dtype: str
+BASE_DIR = Path(__file__).resolve().parent.parent
 
-Unique values in Agent_Response_To_Cancel_Category:
-<StringArray>
-[                                 nan,        'Adjusted account or package',
-              'Other (misidentified)', 'Payment terms / renewal conditions',
-                   'Value of product',        'Incentive / support offered',
- 'Pricing / Financial considerations',         'Cancellation / Termination',
-               'Negotiation / Review', 'Membership / Partnerships benefits',
-                'Offers / Incentives',         'Accreditation / Compliance',
-        'Customer Retention / Growth',          'Payment / Billing options',
-                'Payment convenience',         'Customer Service / Support',
-       'Customer Feedback / Concerns', 'Account Management / Relationships',
-                      'Not Mentioned',             'Contracts / Agreements',
-      'Service / Product Improvement',     'Communication / Responsiveness',
-      'Uncategorized / Miscellaneous']
-Length: 23, dtype: str
+RECEIPT_PATH = BASE_DIR / "data" / "raw" / "receipts"
+BANK_PATH = BASE_DIR / "data" / "raw" / "bank_statements"
 
-Unique values in Argument_That_Convinced_Customer_to_Stay_Category:
-<StringArray>
-[                                        nan,
-               'Incentive / support offered',
- 'Financial Incentives / Cost-Effectiveness',
-        'Accreditation / Compliance / Trust',
-                'Customer Service / Support',
-           'Business Growth / Opportunities',
-                'Non-Renewal / Cancellation',
-              'Value Proposition / Benefits',
-        'Payment Transparency / Flexibility',
-                              'Cancellation',
-                     'Other (misidentified)',
-                'Strong client relationship',
-                          'Value of product',
-                       'Payment convenience',
-                             'Not Mentioned',
-             'Communication / Relationships',
-              'Contract / Renewal Processes',
-        'Payment terms / renewal conditions']
-Length: 18, dtype: str
+RECEIPT_OUT_TXT = BASE_DIR / "data" / "extracted_text" / "receipts"
+BANK_OUT_TXT = BASE_DIR / "data" / "extracted_text" / "bank_statements"
+
+RECEIPT_OUT_JSON = BASE_DIR / "data" / "parsed_json" / "receipts"
+BANK_OUT_JSON = BASE_DIR / "data" / "parsed_json" / "bank_statements"
+
+VALID_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+
+for folder in [RECEIPT_OUT_TXT, BANK_OUT_TXT, RECEIPT_OUT_JSON, BANK_OUT_JSON]:
+    folder.mkdir(parents=True, exist_ok=True)
+
+ocr = PaddleOCR(lang="en")
+
+
+def extract_text_from_result(result):
+    lines = []
+
+    if not result:
+        return lines
+
+    # New PaddleOCR versions may return dict-style result
+    if isinstance(result, list):
+        for page in result:
+            if isinstance(page, dict):
+                texts = page.get("rec_texts", [])
+                scores = page.get("rec_scores", [])
+                boxes = page.get("rec_boxes", [])
+
+                for i, text in enumerate(texts):
+                    lines.append({
+                        "text": str(text),
+                        "score": float(scores[i]) if i < len(scores) else 0.0,
+                        "box": boxes[i].tolist() if i < len(boxes) and hasattr(boxes[i], "tolist") else None
+                    })
+
+            elif isinstance(page, list):
+                for item in page:
+                    try:
+                        text = item[1][0]
+                        score = float(item[1][1])
+                        box = item[0]
+                        lines.append({
+                            "text": str(text),
+                            "score": score,
+                            "box": box
+                        })
+                    except Exception:
+                        pass
+
+    return lines
+
+
+def preprocess_image(image_path):
+    image = cv2.imread(str(image_path))
+
+    if image is None:
+        print(f"[ERROR] Cannot read image: {image_path}")
+        return None
+
+    h, w = image.shape[:2]
+
+    if w < 1400:
+        scale = 1400 / w
+        image = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+
+    return image
+
+
+def run_ocr(image_path):
+    image = preprocess_image(image_path)
+
+    if image is None:
+        return [], ""
+
+    result = ocr.ocr(image)
+    lines = extract_text_from_result(result)
+
+    text = "\n".join([line["text"] for line in lines if line["text"].strip()])
+
+    return lines, text
+
+
+def process_folder(input_dir, txt_dir, json_dir):
+    print(f"\nChecking: {input_dir}")
+
+    files = sorted([f for f in input_dir.iterdir() if f.suffix.lower() in VALID_EXTENSIONS])
+    print(f"Found {len(files)} files")
+
+    for file_path in files:
+        print(f"\nProcessing: {file_path.name}")
+
+        lines, text = run_ocr(file_path)
+
+        txt_path = txt_dir / f"{file_path.stem}.txt"
+        json_path = json_dir / f"{file_path.stem}.json"
+
+        with open(txt_path, "w", encoding="utf-8") as f:
+            f.write(text)
+
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "file_name": file_path.name,
+                "raw_text": text,
+                "ocr_lines": lines
+            }, f, indent=2, ensure_ascii=False)
+
+        print(f"Extracted lines: {len(lines)}")
+        print(f"Saved TXT: {txt_path}")
+
+        if len(text.strip()) == 0:
+            print("WARNING: No text extracted")
+
+
+if __name__ == "__main__":
+    print("OCR started")
+
+    process_folder(RECEIPT_PATH, RECEIPT_OUT_TXT, RECEIPT_OUT_JSON)
+    process_folder(BANK_PATH, BANK_OUT_TXT, BANK_OUT_JSON)
+
+    print("\nOCR completed")import json
+import pandas as pd
+from pathlib import Path
+import re
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+RECEIPT_JSON = BASE_DIR / "data" / "parsed_json" / "receipts"
+BANK_JSON = BASE_DIR / "data" / "parsed_json" / "bank_statements"
+
+OUTPUT_CSV = BASE_DIR / "data" / "processed" / "transactions.csv"
+
+
+# ---------- HELPERS ----------
+
+def extract_amount(text):
+    matches = re.findall(r"\d+[.,]?\d*", text)
+    if matches:
+        try:
+            return float(matches[-1].replace(",", ""))
+        except:
+            return None
+    return None
+
+
+def extract_date(text):
+    match = re.search(r"\d{1,2}[-/]\d{1,2}[-/]\d{2,4}", text)
+    return match.group(0) if match else None
+
+
+# ---------- RECEIPT PARSER ----------
+
+def parse_receipts():
+    records = []
+
+    for file in RECEIPT_JSON.glob("*.json"):
+        with open(file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        lines = data.get("ocr_lines", [])
+
+        merchant = None
+        total = None
+        date = None
+
+        for line in lines:
+            text = line["text"].lower()
+
+            if not merchant:
+                merchant = line["text"]
+
+            if "total" in text or "amount" in text:
+                total = extract_amount(line["text"])
+
+            if not date:
+                date = extract_date(line["text"])
+
+        if total:
+            records.append({
+                "date": date,
+                "merchant": merchant,
+                "description": "receipt purchase",
+                "amount": total,
+                "transaction_type": "debit",
+                "source": "receipt"
+            })
+
+    return records
+
+
+# ---------- BANK PARSER ----------
+
+def parse_bank():
+    records = []
+
+    for file in BANK_JSON.glob("*.json"):
+        with open(file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        lines = data.get("ocr_lines", [])
+
+        for line in lines:
+            text = line["text"]
+
+            # Try detecting rows with numbers (transactions)
+            if any(char.isdigit() for char in text):
+
+                date = extract_date(text)
+                amount = extract_amount(text)
+
+                if amount:
+                    records.append({
+                        "date": date,
+                        "merchant": "bank_transaction",
+                        "description": text,
+                        "amount": amount,
+                        "transaction_type": "unknown",
+                        "source": "bank"
+                    })
+
+    return records
+
+
+# ---------- MAIN ----------
+
+def main():
+    receipt_data = parse_receipts()
+    bank_data = parse_bank()
+
+    all_data = receipt_data + bank_data
+
+    df = pd.DataFrame(all_data)
+
+    df.insert(0, "transaction_id", range(1, len(df) + 1))
+
+    OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(OUTPUT_CSV, index=False)
+
+    print(f"Saved transactions: {len(df)}")
+    print(f"File: {OUTPUT_CSV}")
+
+
+if __name__ == "__main__":
+    main()
