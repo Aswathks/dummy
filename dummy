@@ -1,17 +1,23 @@
 from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 import shutil
 
 app = FastAPI()
 
-# Base project folder
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Input folders
 RECEIPT_FOLDER = BASE_DIR / "data" / "raw" / "receipts"
 BANK_FOLDER = BASE_DIR / "data" / "raw" / "bank_statements"
 
-# Create folders if not exist
 RECEIPT_FOLDER.mkdir(parents=True, exist_ok=True)
 BANK_FOLDER.mkdir(parents=True, exist_ok=True)
 
@@ -23,13 +29,6 @@ def home():
 
 @app.post("/upload-file")
 def upload_file(file: UploadFile = File(...), file_type: str = "receipt"):
-    """
-    file_type:
-    - receipt
-    - bank_statement
-    """
-
-    # Decide save location
     if file_type == "bank_statement":
         save_folder = BANK_FOLDER
     else:
@@ -37,7 +36,6 @@ def upload_file(file: UploadFile = File(...), file_type: str = "receipt"):
 
     save_path = save_folder / file.filename
 
-    # Save uploaded file
     with open(save_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
