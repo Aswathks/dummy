@@ -1,70 +1,3 @@
-import re
-
-
-def parse_receipt_text(text, file_name):
-    lines = text.split("\n")
-    lines = [line.strip() for line in lines if line.strip()]
-
-    # Vendor name usually comes in first line
-    vendor = lines[0] if lines else "Unknown"
-
-    # Extract total amount
-    total_amount = 0
-
-    total_patterns = [
-        r"TOTAL[:\s\$₹€]*([\d,]+\.?\d*)",
-        r"Total[:\s\$₹€]*([\d,]+\.?\d*)",
-        r"total[:\s\$₹€]*([\d,]+\.?\d*)",
-        r"TOTAL\s*\$?\s*([\d,]+\.?\d*)"
-    ]
-
-    for pattern in total_patterns:
-        match = re.search(pattern, text)
-        if match:
-            total_amount = float(match.group(1).replace(",", ""))
-            break
-
-    # Extract date
-    date = "Not Found"
-
-    date_patterns = [
-        r"[A-Za-z]+\s\d{1,2}(st|nd|rd|th)?,\s\d{4}",
-        r"\d{2}/\d{2}/\d{4}",
-        r"\d{2}-\d{2}-\d{4}",
-        r"\d{4}-\d{2}-\d{2}"
-    ]
-
-    for pattern in date_patterns:
-        match = re.search(pattern, text)
-        if match:
-            date = match.group(0)
-            break
-
-    # Extract payment method
-    payment_method = "Unknown"
-
-    upper_text = text.upper()
-
-    if "CREDIT CARD" in upper_text:
-        payment_method = "Credit Card"
-    elif "DEBIT CARD" in upper_text:
-        payment_method = "Debit Card"
-    elif "CASH" in upper_text:
-        payment_method = "Cash"
-    elif "UPI" in upper_text:
-        payment_method = "UPI"
-    elif "VISA" in upper_text:
-        payment_method = "Visa Card"
-
-    return {
-        "file_name": file_name,
-        "vendor": vendor,
-        "date": date,
-        "total_amount": total_amount,
-        "payment_method": payment_method,
-        "raw_text": text
-    }
-.....
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
@@ -72,6 +5,7 @@ import shutil
 
 from ocr_service import extract_text_from_image
 from parser import parse_receipt_text
+from db_service import insert_transaction, get_all_transactions
 
 app = FastAPI()
 
@@ -107,7 +41,6 @@ def upload_file(
     file: UploadFile = File(...),
     file_type: str = "receipt"
 ):
-    # choose folder based on file type
     if file_type == "bank_statement":
         save_folder = BANK_FOLDER
         text_folder = TEXT_BANK_FOLDER
@@ -115,23 +48,21 @@ def upload_file(
         save_folder = RECEIPT_FOLDER
         text_folder = TEXT_RECEIPT_FOLDER
 
-    # save uploaded image
     save_path = save_folder / file.filename
 
     with open(save_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    # OCR extraction
     extracted_text = extract_text_from_image(save_path)
 
-    # save OCR text
     text_file_path = text_folder / f"{Path(file.filename).stem}.txt"
 
     with open(text_file_path, "w", encoding="utf-8") as f:
         f.write(extracted_text)
 
-    # parse receipt text
     parsed_data = parse_receipt_text(extracted_text, file.filename)
+
+    insert_transaction(parsed_data)
 
     return {
         "status": "success",
@@ -139,6 +70,80 @@ def upload_file(
         "file_type": file_type,
         "saved_image_path": str(save_path),
         "saved_text_path": str(text_file_path),
-        "parsed_data": parsed_data,
-        "ocr_text": extracted_text
+        "parsed_data": parsed_data
     }
+
+
+@app.get("/transactions")
+def transactions():
+    rows = get_all_transactions()
+
+    return {
+        "total_transactions": len(rows),
+        "data": rows
+    }...
+import sqlite3
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+DB_PATH = BASE_DIR / "database" / "expense_tracker.db"
+
+
+def create_tables():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            file_name TEXT,
+            vendor TEXT,
+            date TEXT,
+            total_amount REAL,
+            payment_method TEXT,
+            raw_text TEXT
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+
+def insert_transaction(data):
+    create_tables()
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO transactions
+        (file_name, vendor, date, total_amount, payment_method, raw_text)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (
+        data["file_name"],
+        data["vendor"],
+        data["date"],
+        data["total_amount"],
+        data["payment_method"],
+        data["raw_text"]
+    ))
+
+    conn.commit()
+    conn.close()
+
+
+def get_all_transactions():
+    create_tables()
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id, file_name, vendor, date, total_amount, payment_method
+        FROM transactions
+    """)
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    return rows
