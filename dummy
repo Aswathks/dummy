@@ -1,14 +1,27 @@
-Step 1: Install required packages
-In terminal:
+Step 1 — FastAPI Upload + OCR Implementation
+Right now your goal is only this:
+Plain text
+Upload image → OCR text extraction → save text file → return OCR output
+Do NOT do SQLite, RAG, chatbot, dashboard now.
+Only Step 1.
+What you need to do now
+1. Install required packages
+Open terminal inside project folder:
 Bash
-pip install fastapi uvicorn python-multipart pillow pytesseract pandas streamlit chromadb sentence-transformers python-dotenv
-Also install Tesseract OCR in Windows.
-After install, check this path:
+pip install fastapi uvicorn python-multipart pillow pytesseract
+2. Install Tesseract OCR (Very Important)
+Download and install:
+Plain text
+Tesseract OCR for Windows
+After install, verify path:
 Plain text
 C:\Program Files\Tesseract-OCR\tesseract.exe
-Step 2: backend/ocr_service.py
+This path is important.
+3. Create file
+Plain text
+backend/ocr_service.py
+Code:
 Python
-from pathlib import Path
 from PIL import Image
 import pytesseract
 
@@ -17,146 +30,17 @@ pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tessera
 
 
 def extract_text_from_image(image_path):
+    """
+    Extract text from uploaded image using OCR
+    """
+
     image = Image.open(image_path)
-    text = pytesseract.image_to_string(image)
-    return text
-Step 3: backend/parser.py
-Python
-import re
-from datetime import datetime
 
+    extracted_text = pytesseract.image_to_string(image)
 
-def parse_receipt_text(text, file_name):
-    lines = text.split("\n")
-    lines = [line.strip() for line in lines if line.strip()]
-
-    vendor = lines[0] if lines else "Unknown"
-
-    amount = None
-    date = None
-
-    # find amount
-    amount_patterns = [
-        r"total[:\s₹$]*([\d,]+\.?\d*)",
-        r"amount[:\s₹$]*([\d,]+\.?\d*)",
-        r"₹\s*([\d,]+\.?\d*)",
-        r"\$\s*([\d,]+\.?\d*)"
-    ]
-
-    for pattern in amount_patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            amount = match.group(1).replace(",", "")
-            break
-
-    # find date
-    date_patterns = [
-        r"\d{2}/\d{2}/\d{4}",
-        r"\d{2}-\d{2}-\d{4}",
-        r"\d{4}-\d{2}-\d{2}"
-    ]
-
-    for pattern in date_patterns:
-        match = re.search(pattern, text)
-        if match:
-            date = match.group(0)
-            break
-
-    if amount is None:
-        amount = 0
-
-    return {
-        "file_name": file_name,
-        "vendor": vendor,
-        "amount": float(amount),
-        "date": date,
-        "raw_text": text
-    }
-Step 4: backend/categorize.py
-Python
-def categorize_transaction(text):
-    text = text.lower()
-
-    if any(word in text for word in ["zomato", "swiggy", "restaurant", "food", "hotel"]):
-        return "Food"
-
-    elif any(word in text for word in ["uber", "ola", "fuel", "petrol", "diesel", "metro"]):
-        return "Transport"
-
-    elif any(word in text for word in ["amazon", "flipkart", "shopping", "store"]):
-        return "Shopping"
-
-    elif any(word in text for word in ["electricity", "water", "bill", "recharge"]):
-        return "Bills"
-
-    elif any(word in text for word in ["hospital", "medical", "pharmacy"]):
-        return "Health"
-
-    else:
-        return "Others"
-Step 5: backend/db_service.py
-Python
-import sqlite3
-from pathlib import Path
-
-BASE_DIR = Path(__file__).resolve().parent.parent
-DB_PATH = BASE_DIR / "database" / "expense_tracker.db"
-
-
-def create_tables():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS transactions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            file_name TEXT,
-            vendor TEXT,
-            amount REAL,
-            date TEXT,
-            category TEXT,
-            raw_text TEXT
-        )
-    """)
-
-    conn.commit()
-    conn.close()
-
-
-def insert_transaction(data):
-    create_tables()
-
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        INSERT INTO transactions 
-        (file_name, vendor, amount, date, category, raw_text)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (
-        data["file_name"],
-        data["vendor"],
-        data["amount"],
-        data["date"],
-        data["category"],
-        data["raw_text"]
-    ))
-
-    conn.commit()
-    conn.close()
-
-
-def get_all_transactions():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT * FROM transactions")
-    rows = cursor.fetchall()
-
-    conn.close()
-    return rows
-Step 6: Update your backend/app.py
-Replace your current code with this:
+    return extracted_text
+4. Update backend/app.py
+Use this clean version:
 Python
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
@@ -164,9 +48,6 @@ from pathlib import Path
 import shutil
 
 from ocr_service import extract_text_from_image
-from parser import parse_receipt_text
-from categorize import categorize_transaction
-from db_service import insert_transaction, get_all_transactions
 
 app = FastAPI()
 
@@ -180,11 +61,11 @@ app.add_middleware(
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-RECEIPT_FOLDER = BASE_DIR / "data" / "raw" / "receipts"
-BANK_FOLDER = BASE_DIR / "data" / "raw" / "bank_statements"
+RECEIPT_FOLDER = BASE_DIR / "backend" / "temp_uploads" / "receipts"
+BANK_FOLDER = BASE_DIR / "backend" / "temp_uploads" / "bank_statements"
 
-TEXT_RECEIPT_FOLDER = BASE_DIR / "data" / "extracted_text" / "receipts"
-TEXT_BANK_FOLDER = BASE_DIR / "data" / "extracted_text" / "bank_statements"
+TEXT_RECEIPT_FOLDER = BASE_DIR / "exports" / "extracted_text" / "receipts"
+TEXT_BANK_FOLDER = BASE_DIR / "exports" / "extracted_text" / "bank_statements"
 
 RECEIPT_FOLDER.mkdir(parents=True, exist_ok=True)
 BANK_FOLDER.mkdir(parents=True, exist_ok=True)
@@ -198,8 +79,11 @@ def home():
 
 
 @app.post("/upload-file")
-def upload_file(file: UploadFile = File(...), file_type: str = "receipt"):
-
+def upload_file(
+    file: UploadFile = File(...),
+    file_type: str = "receipt"
+):
+    # Decide save folders
     if file_type == "bank_statement":
         save_folder = BANK_FOLDER
         text_folder = TEXT_BANK_FOLDER
@@ -207,82 +91,82 @@ def upload_file(file: UploadFile = File(...), file_type: str = "receipt"):
         save_folder = RECEIPT_FOLDER
         text_folder = TEXT_RECEIPT_FOLDER
 
+    # Save uploaded image
     save_path = save_folder / file.filename
 
     with open(save_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    # OCR
+    # OCR extraction
     extracted_text = extract_text_from_image(save_path)
 
-    # save extracted text
+    # Save OCR text file
     text_file_path = text_folder / f"{Path(file.filename).stem}.txt"
+
     with open(text_file_path, "w", encoding="utf-8") as f:
         f.write(extracted_text)
-
-    # parse
-    parsed_data = parse_receipt_text(extracted_text, file.filename)
-
-    # categorize
-    category = categorize_transaction(extracted_text)
-    parsed_data["category"] = category
-
-    # save to SQLite
-    insert_transaction(parsed_data)
 
     return {
         "status": "success",
         "file_name": file.filename,
         "file_type": file_type,
-        "saved_to": str(save_path),
-        "extracted_text_file": str(text_file_path),
-        "parsed_data": parsed_data
+        "saved_image_path": str(save_path),
+        "saved_text_path": str(text_file_path),
+        "ocr_text": extracted_text
     }
-
-
-@app.get("/transactions")
-def transactions():
-    rows = get_all_transactions()
-
-    return {
-        "total_transactions": len(rows),
-        "data": rows
-    }
-Step 7: Run FastAPI
-From project folder:
+5. Run FastAPI
+Inside terminal:
 Bash
 cd backend
 uvicorn app:app --reload
-Open:
+You should see:
+Plain text
+Uvicorn running on http://127.0.0.1:8000
+6. Open Swagger UI
+Open browser:
 Plain text
 http://127.0.0.1:8000/docs
-Upload receipt again.
-Now response should show:
+You will see:
+Plain text
+POST /upload-file
+Click it.
+7. Upload image
+Use one of your receipt images first.
+Example:
+Plain text
+apple_receipt.jpg
+Choose:
+Plain text
+file_type = receipt
+Then click:
+Plain text
+Execute
+8. Expected output
+You should get response like:
 JSON
 {
   "status": "success",
-  "parsed_data": {
-    "vendor": "...",
-    "amount": 250.0,
-    "date": "...",
-    "category": "Food"
-  }
+  "file_name": "apple_receipt.jpg",
+  "file_type": "receipt",
+  "saved_image_path": "...",
+  "saved_text_path": "...",
+  "ocr_text": "Apple Store Receipt..."
 }
-Step 8: Check database
-Open browser:
+After Step 1 success
+Checklist:
 Plain text
-http://127.0.0.1:8000/transactions
-You should see saved transaction rows.
-Now your current stage is this
-Plain text
-✅ FastAPI created
-✅ File upload working
-✅ Receipt saved
-⬜ OCR extraction
-⬜ Parsing
-⬜ SQLite saving
+✅ Image upload works
+✅ OCR text extracted
+✅ OCR text saved as .txt
+
+NEXT:
+⬜ Parser
+⬜ SQLite
+⬜ Categorization
 ⬜ Dashboard
 ⬜ Embeddings
-⬜ ChromaDB
-⬜ SQL + RAG chatbot
+⬜ RAG chatbot
 ⬜ n8n automation
+Your task now
+Complete only this first.
+Do not move to Step 2 until OCR works perfectly.
